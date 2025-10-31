@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Cosmic Lyric Journey</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', monospace;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body>
+<script>
+let song;
+const mp3 = "https://cdn3.mp3gaa.xyz/swahilisongs/wp-content/uploads/2023/05/Kid_Cudi_-_New_Mode.mp3";
+
+const startAt = 45;
+let started = false;
+
+let normalRate = 1.0;
+let normalVol = 1.0;
+let rateNow = normalRate;
+let volNow = normalVol;
+let slowTargetRate = 0.36;
+let slowTargetVol = 0.22;
+let rateLerpSpeed = 0.02;
+let volLerpSpeed = 0.04;
+let forceSlow = false;
+
+let showFeedback = false;
+let feedbackText = "";
+
+const choiceTimeout = 3.8;
+let choiceStartTime = 0;
+
+let checkpoints = [
+  { time: 50.0, correct: 1, options: ["1: Finally got my head right", "2: It's a new me", "3: I got heaven in my sights"], done: false },
+  { time: 58.0, correct: 2, options: ["1: When it seems it's all too much", "2: And your soul, it can't be rushed", "3: When the going's gettin' tough"], done: false },
+  { time: 66.0, correct: 3, options: ["1: And you know you can't give up", "2: I lost my way", "3: And you know you can't give up, no way"], done: false },
+  { time: 78.0, correct: 1, options: ["1: And I'm in a new mode", "2: Another level", "3: I pray for so long"], done: false },
+  { time: 92.0, correct: 2, options: ["1: Ain't the same as when you met me", "2: I looked inside, I never let me down", "3: I looked outside"], done: false },
+  { time: 110.0, correct: 1, options: ["1: Ain't the same as when you left me", "2: Things have changed", "3: You won't forget me now"], done: false },
+  { time: 130.0, correct: 3, options: ["1: These thoughts, they take me over", "2: I sit with thoughts so sober", "3: Just another night alone, I decide"], done: false },
+  { time: 150.0, correct: 2, options: ["1: Finally acceptin' me", "2: lovin' who I am inside", "3: I'm just feelin' fine"], done: false },
+  { time: 170.0, correct: 1, options: ["1: And I'm in a new mode", "2: Another level", "3: New day begins"], done: false },
+  { time: 190.0, correct: 3, options: ["1: I'ma be alright", "2: So much more than you know", "3: So much more than you know"], done: false }
+];
+
+let questionShown = false;
+let activeIndex = -1;
+
+let particles = [];
+let stars = [];
+let rotation = 0;
+let pulsePhase = 0;
+let waveOffset = 0;
+
+// Touch/button state
+let startButton = null;
+let optionButtons = [];
+
+function preload() {
+  song = loadSound(mp3);
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  textFont('Courier New, monospace');
+  
+  for (let i = 0; i < 150; i = i + 1) {
+    particles.push({
+      x: random(width),
+      y: random(height),
+      z: random(1000),
+      size: random(1, 4),
+      speed: random(0.5, 2)
+    });
+  }
+  
+  for (let i = 0; i < 200; i = i + 1) {
+    stars.push({
+      x: random(width),
+      y: random(height),
+      brightness: random(100, 255),
+      twinkle: random(TWO_PI)
+    });
+  }
+  
+  rateNow = normalRate;
+  volNow = normalVol;
+}
+
+function draw() {
+  let c1 = color(10, 5, 30);
+  let c2 = color(50, 10, 80);
+  let c3 = color(20, 5, 50);
+  
+  for (let y = 0; y < height; y = y + 1) {
+    let inter = map(y, 0, height, 0, 1);
+    let c = lerpColor(c1, lerpColor(c2, c3, sin(inter * 3.14159)), inter);
+    stroke(c);
+    line(0, y, width, y);
+  }
+  
+  for (let s of stars) {
+    s.twinkle = s.twinkle + 0.05;
+    let bright = s.brightness + sin(s.twinkle) * 50;
+    fill(255, bright);
+    noStroke();
+    ellipse(s.x, s.y, 2, 2);
+    
+    fill(200, 150, 255, bright * 0.3);
+    ellipse(s.x, s.y, 8, 8);
+  }
+  
+  for (let p of particles) {
+    p.z = p.z - p.speed * (1 + rateNow * 2);
+    if (p.z < 1) {
+      p.z = 1000;
+      p.x = random(width);
+      p.y = random(height);
+    }
+    
+    let sx = map(p.x - width/2, 0, width, 0, width) * (1000/p.z) + width/2;
+    let sy = map(p.y - height/2, 0, height, 0, height) * (1000/p.z) + height/2;
+    let size = map(p.z, 0, 1000, p.size * 4, 0.5);
+    let alpha = map(p.z, 0, 1000, 255, 50);
+    
+    fill(255, 150, 255, alpha);
+    noStroke();
+    ellipse(sx, sy, size, size);
+  }
+  
+  pulsePhase = pulsePhase + 0.03;
+  push();
+  translate(width/2, height/2);
+  noFill();
+  for (let i = 0; i < 6; i = i + 1) {
+    let radius = 150 + i * 80 + sin(pulsePhase + i * 0.5) * 30;
+    let alpha = map(i, 0, 6, 100, 20);
+    stroke(138, 43, 226, alpha);
+    strokeWeight(2);
+    ellipse(0, 0, radius * 2, radius * 2);
+    
+    stroke(255, 105, 180, alpha * 0.5);
+    strokeWeight(1);
+    ellipse(0, 0, radius * 2 + 10, radius * 2 + 10);
+  }
+  pop();
+  
+  rotation = rotation + 0.005;
+  push();
+  translate(width/2, height/2);
+  rotate(rotation);
+  noFill();
+  for (let i = 0; i < 8; i = i + 1) {
+    let angle = i * TWO_PI / 8;
+    let x = cos(angle) * 200;
+    let y = sin(angle) * 200;
+    fill(255, 105, 180, 150 + sin(pulsePhase + i) * 100);
+    noStroke();
+    ellipse(x, y, 15, 15);
+    
+    stroke(138, 43, 226, 100);
+    strokeWeight(1);
+    line(0, 0, x, y);
+  }
+  pop();
+  
+  waveOffset = waveOffset + 0.05 * rateNow;
+  push();
+  noFill();
+  stroke(255, 150, 255, 80);
+  strokeWeight(2);
+  beginShape();
+  for (let x = 0; x < width; x = x + 5) {
+    let y = height * 0.7 + sin(x * 0.02 + waveOffset) * 30 * (1 - volNow + 0.5);
+    vertex(x, y);
+  }
+  endShape();
+  pop();
+  
+  if (!started) {
+    push();
+    fill(255, 200, 255);
+    textSize(min(32, width * 0.08));
+    textAlign(CENTER, CENTER);
+    text("COSMIC LYRIC JOURNEY", width/2, height * 0.25);
+    
+    fill(180, 130, 230, 150);
+    textSize(min(14, width * 0.035));
+    text("Tap options when lyrics appear", width/2, height * 0.35);
+    text("A journey for solitary souls", width/2, height * 0.85);
+    pop();
+    
+    // Draw start button
+    let btnW = min(300, width * 0.7);
+    let btnH = 60;
+    let btnX = width/2;
+    let btnY = height * 0.5;
+    startButton = {x: btnX, y: btnY, w: btnW, h: btnH};
+    
+    push();
+    fill(80, 40, 120, 200 + sin(frameCount * 0.1) * 55);
+    stroke(138, 43, 226, 200);
+    strokeWeight(3);
+    rectMode(CENTER);
+    rect(btnX, btnY, btnW, btnH, 15);
+    
+    fill(255, 220, 255);
+    noStroke();
+    textSize(min(24, width * 0.06));
+    textAlign(CENTER, CENTER);
+    text("TAP TO START", btnX, btnY);
+    pop();
+  } else {
+    startButton = null;
+    push();
+    fill(255, 200, 255, 200);
+    textSize(min(16, width * 0.04));
+    textAlign(CENTER);
+    let t = song.isLoaded() ? nf(song.currentTime(), 2, 2) : "--.--";
+    text("◈ " + t + "s ◈", width/2, 40);
+    pop();
+  }
+  
+  if (started && song.isLoaded() && song.isPlaying() && !questionShown) {
+    for (let i = 0; i < checkpoints.length; i = i + 1) {
+      if (!checkpoints[i].done && song.currentTime() >= checkpoints[i].time) {
+        triggerCheckpoint(i);
+        break;
+      }
+    }
+  }
+  
+  let targetRate = normalRate;
+  let targetVol = normalVol;
+  if (questionShown) {
+    targetRate = slowTargetRate;
+    targetVol = slowTargetVol;
+  }
+  if (forceSlow) {
+    targetRate = slowTargetRate * 0.40;
+    targetVol = slowTargetVol * 0.55;
+  }
+  rateNow = lerp(rateNow, targetRate, rateLerpSpeed * (deltaTime / 16.67));
+  volNow = lerp(volNow, targetVol, volLerpSpeed * (deltaTime / 16.67));
+  
+  if (song && song.isLoaded()) {
+    try {
+      song.rate(constrain(rateNow, 0.05, 2.0));
+      song.setVolume(constrain(volNow, 0, 1));
+    } catch (e) {}
+  }
+  
+  if (questionShown && activeIndex >= 0) {
+    drawQuestionUI(activeIndex);
+    let elapsed = (millis() - choiceStartTime) / 1000.0;
+    let pct = constrain(elapsed / choiceTimeout, 0, 1);
+    drawTimeoutBar(pct);
+    if (elapsed >= choiceTimeout) {
+      handleTimeoutFail();
+    }
+  } else {
+    optionButtons = [];
+    drawUpcomingHint();
+  }
+  
+  if (showFeedback) {
+    push();
+    fill(255, 150, 255, 200 + sin(frameCount * 0.2) * 55);
+    textSize(min(28, width * 0.07));
+    textAlign(CENTER);
+    text(feedbackText, width/2, height * 0.15);
+    pop();
+  }
+}
+
+function drawQuestionUI(idx) {
+  optionButtons = [];
+  
+  push();
+  let boxW = min(width * 0.85, 600);
+  let boxH = min(height * 0.6, 400);
+  
+  fill(50, 20, 80, 180);
+  stroke(150, 100, 200, 200);
+  strokeWeight(2);
+  rectMode(CENTER);
+  rect(width/2, height/2, boxW, boxH, 20);
+  
+  fill(255, 200, 255);
+  textSize(min(24, width * 0.06));
+  textAlign(CENTER, CENTER);
+  text("✧ feel the next verse ✧", width/2, height * 0.3);
+  
+  let opts = checkpoints[idx].options;
+  textSize(min(16, width * 0.04));
+  let btnH = min(55, height * 0.08);
+  let btnW = min(boxW * 0.85, 500);
+  
+  for (let j = 0; j < opts.length; j = j + 1) {
+    let y = height * 0.42 + j * (btnH + 15);
+    
+    let alpha = 100 + sin(frameCount * 0.05 + j) * 50;
+    fill(80, 40, 120, alpha);
+    stroke(138, 43, 226, 150);
+    strokeWeight(1);
+    rect(width/2, y, btnW, btnH, 10);
+    
+    noStroke();
+    fill(255, 220, 255);
+    text(opts[j], width/2, y);
+    
+    optionButtons.push({x: width/2, y: y, w: btnW, h: btnH, choice: j + 1});
+  }
+  pop();
+}
+
+function drawTimeoutBar(pct) {
+  push();
+  let barWidth = min(width * 0.7, 400);
+  let barHeight = 20;
+  let x = width/2;
+  let y = height * 0.75;
+  
+  noStroke();
+  fill(138, 43, 226, 30);
+  rect(x, y, barWidth + 20, barHeight + 10, 15);
+  
+  fill(20, 10, 40, 200);
+  stroke(100, 50, 150);
+  strokeWeight(2);
+  rectMode(CENTER);
+  rect(x, y, barWidth, barHeight, 10);
+  
+  noStroke();
+  fill(255, 105, 180, 200);
+  let progressWidth = barWidth * (1 - pct);
+  rectMode(CORNER);
+  rect(x - barWidth/2, y - barHeight/2, progressWidth, barHeight, 10);
+  
+  rectMode(CENTER);
+  fill(200, 150, 255);
+  textSize(min(14, width * 0.035));
+  textAlign(CENTER);
+  text(nfc(max(0, choiceTimeout - (millis() - choiceStartTime)/1000), 1) + "s", x, y + 35);
+  pop();
+}
+
+function drawUpcomingHint() {
+  let next = null;
+  for (let i = 0; i < checkpoints.length; i = i + 1) {
+    if (!checkpoints[i].done) { 
+      next = checkpoints[i]; 
+      break; 
+    }
+  }
+  if (!next || !started) return;
+  
+  push();
+  fill(180, 130, 230, 150);
+  textSize(min(14, width * 0.035));
+  textAlign(CENTER);
+  let when = max(0, next.time - (song && song.isLoaded() ? song.currentTime() : startAt));
+  text("⟡ next in " + nfc(when, 1) + "s ⟡", width/2, height * 0.9);
+  pop();
+}
+
+function mousePressed() {
+  handleTouch(mouseX, mouseY);
+}
+
+function touchStarted() {
+  if (touches.length > 0) {
+    handleTouch(touches[0].x, touches[0].y);
+  }
+  return false;
+}
+
+function handleTouch(x, y) {
+  // Check start button
+  if (startButton && !started) {
+    if (isInside(x, y, startButton)) {
+      started = true;
+      resetAllCheckpoints();
+      playFrom(startAt);
+      return;
+    }
+  }
+  
+  // Check option buttons
+  if (questionShown && activeIndex >= 0) {
+    for (let btn of optionButtons) {
+      if (isInside(x, y, btn)) {
+        let cp = checkpoints[activeIndex];
+        if (btn.choice === cp.correct) {
+          cp.done = true;
+          showFeedback = true;
+          feedbackText = "✨ harmonized ✨";
+          questionShown = false;
+          activeIndex = -1;
+          let oldRateSpeed = rateLerpSpeed;
+          let oldVolSpeed = volLerpSpeed;
+          rateLerpSpeed = 0.12;
+          volLerpSpeed = 0.16;
+          setTimeout(function() {
+            showFeedback = false;
+            rateLerpSpeed = oldRateSpeed;
+            volLerpSpeed = oldVolSpeed;
+          }, 520);
+        } else {
+          showFeedback = true;
+          feedbackText = "⟡ dissonance ⟡";
+          questionShown = false;
+          activeIndex = -1;
+          forceSlow = true;
+          setTimeout(function() {
+            forceSlow = false;
+            showFeedback = false;
+            restartRun();
+          }, 900);
+        }
+        return;
+      }
+    }
+  }
+}
+
+function isInside(x, y, btn) {
+  return x > btn.x - btn.w/2 && x < btn.x + btn.w/2 &&
+         y > btn.y - btn.h/2 && y < btn.y + btn.h/2;
+}
+
+function triggerCheckpoint(i) {
+  activeIndex = i;
+  questionShown = true;
+  choiceStartTime = millis();
+  try { song.setVolume(0.85, 0.06); } catch (e) {}
+}
+
+function handleTimeoutFail() {
+  showFeedback = true;
+  feedbackText = "⧗ time dissolved ⧗";
+  questionShown = false;
+  activeIndex = -1;
+  forceSlow = true;
+  setTimeout(function() {
+    forceSlow = false;
+    showFeedback = false;
+    restartRun();
+  }, 900);
+}
+
+function restartRun() {
+  if (song && song.isLoaded()) {
+    song.stop();
+    setTimeout(function() {
+      resetAllCheckpoints();
+      playFrom(startAt);
+    }, 70);
+  } else {
+    resetAllCheckpoints();
+  }
+}
+
+function resetAllCheckpoints() {
+  for (let c of checkpoints) c.done = false;
+  questionShown = false;
+  activeIndex = -1;
+  showFeedback = false;
+  feedbackText = "";
+  rateNow = normalRate;
+  volNow = normalVol;
+  forceSlow = false;
+}
+
+function playFrom(sec) {
+  if (!song || !song.isLoaded()) return;
+  song.stop();
+  try {
+    song.play(0, 1, 1, sec);
+  } catch (e) {
+    song.jump(sec);
+    song.play();
+  }
+  rateNow = normalRate;
+  volNow = normalVol;
+  questionShown = false;
+  activeIndex = -1;
+  showFeedback = false;
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+</script>
+</body>
+</html>
